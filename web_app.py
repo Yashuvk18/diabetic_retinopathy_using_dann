@@ -27,6 +27,7 @@ from flask import (
 from fpdf import FPDF
 from PIL import Image
 from torchvision import transforms
+from werkzeug.exceptions import RequestEntityTooLarge
 
 from src.models import DANN
 
@@ -85,6 +86,8 @@ def resolve_device() -> torch.device:
 
 
 DEVICE = resolve_device()
+# Keep CPU threading controlled on small cloud instances.
+torch.set_num_threads(max(1, int(os.getenv("TORCH_NUM_THREADS", "1"))))
 MODEL: DANN | None = None
 TRANSFORM = transforms.Compose(
     [
@@ -97,6 +100,7 @@ TRANSFORM = transforms.Compose(
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "change-this-secret-in-production")
+app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "32")) * 1024 * 1024
 
 
 def login_required(fn: Callable) -> Callable:
@@ -614,6 +618,12 @@ def admin():
         total=len(logs),
         admin_user=session.get("admin_user", "doctor"),
     )
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_upload_too_large(_exc):
+    max_mb = int(app.config.get("MAX_CONTENT_LENGTH", 0) / (1024 * 1024))
+    return jsonify({"error": f"Uploaded file is too large. Max allowed size is {max_mb}MB."}), 413
 
 
 @app.post("/predict")

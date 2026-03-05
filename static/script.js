@@ -289,6 +289,30 @@ function showBatchResult(payload) {
   }
 }
 
+async function parseJsonResponse(response) {
+  const text = await response.text();
+  let payload = null;
+
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch (_err) {
+      payload = null;
+    }
+  }
+
+  if (!response.ok) {
+    const message = (payload && payload.error) || text || `Request failed with status ${response.status}`;
+    throw new Error(message);
+  }
+
+  if (!payload) {
+    throw new Error("Server returned empty/non-JSON response. Check deployment logs for backend errors.");
+  }
+
+  return payload;
+}
+
 async function runSinglePrediction() {
   if (!window.MODEL_READY) {
     setState("Model checkpoint is missing. Train model or set MODEL_PATH first.", true);
@@ -316,11 +340,7 @@ async function runSinglePrediction() {
       body: data,
     });
 
-    const payload = await response.json();
-    if (!response.ok) {
-      throw new Error(payload.error || "Prediction request failed.");
-    }
-
+    const payload = await parseJsonResponse(response);
     showSingleResult(payload);
   } catch (error) {
     setState(error.message || "Prediction failed.", true);
@@ -365,11 +385,7 @@ async function runBatchPrediction() {
       body: data,
     });
 
-    const payload = await response.json();
-    if (!response.ok) {
-      throw new Error(payload.error || "Batch prediction failed.");
-    }
-
+    const payload = await parseJsonResponse(response);
     showBatchResult(payload);
   } catch (error) {
     setState(error.message || "Batch prediction failed.", true);
@@ -458,8 +474,14 @@ if (downloadReportBtn) {
       });
 
       if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error || "Failed to generate PDF report.");
+        const text = await response.text();
+        let payload = {};
+        try {
+          payload = JSON.parse(text);
+        } catch (_err) {
+          payload = {};
+        }
+        throw new Error(payload.error || text || "Failed to generate PDF report.");
       }
 
       const blob = await response.blob();
