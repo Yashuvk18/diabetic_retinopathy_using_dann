@@ -181,6 +181,9 @@ function showSingleResult(payload) {
   resultUrgency.textContent = `${payload.urgency || "Unknown"} priority`;
   resultLabel.textContent = payload.label || "-";
   resultMessage.textContent = payload.message || "-";
+  if (payload.gradcam_disabled_reason) {
+    resultMessage.textContent += ` ${payload.gradcam_disabled_reason}`;
+  }
 
   const patient = payload.patient || collectPatientMetadata();
   resultPatient.textContent = patientLine(patient);

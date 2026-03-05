@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import gc
 import io
 import json
 import os
@@ -42,7 +43,8 @@ DEFAULT_METRICS_DIR = APP_ROOT / "outputs" / "dann_ddr_to_aptos_3class"
 METRICS_DIR = Path(os.getenv("METRICS_DIR", str(DEFAULT_METRICS_DIR)))
 PRESENTATION_IDRID_ACCURACY = float(os.getenv("PRESENTATION_IDRID_ACCURACY", "71.87"))
 PRESENTATION_URGENT_RECALL = float(os.getenv("PRESENTATION_URGENT_RECALL", "79.0"))
-MAX_BATCH_FILES = int(os.getenv("MAX_BATCH_FILES", "100"))
+MAX_BATCH_FILES = int(os.getenv("MAX_BATCH_FILES", "20"))
+ENABLE_GRADCAM = os.getenv("ENABLE_GRADCAM", "1") == "1"
 
 ADMIN_USER = os.getenv("ADMIN_USER", "doctor")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "retina123")
@@ -88,6 +90,10 @@ def resolve_device() -> torch.device:
 DEVICE = resolve_device()
 # Keep CPU threading controlled on small cloud instances.
 torch.set_num_threads(max(1, int(os.getenv("TORCH_NUM_THREADS", "1"))))
+try:
+    torch.set_num_interop_threads(max(1, int(os.getenv("TORCH_NUM_INTEROP_THREADS", "1"))))
+except Exception:
+    pass
 MODEL: DANN | None = None
 TRANSFORM = transforms.Compose(
     [
@@ -100,7 +106,7 @@ TRANSFORM = transforms.Compose(
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY", "change-this-secret-in-production")
-app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "32")) * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "12")) * 1024 * 1024
 
 
 def login_required(fn: Callable) -> Callable:
@@ -636,10 +642,21 @@ def predict():
         return jsonify({"error": "Empty filename."}), 400
 
     patient = parse_patient_metadata(request.form)
+    gradcam_flag = str(request.form.get("gradcam", "1")).strip().lower()
+    include_gradcam = ENABLE_GRADCAM and gradcam_flag not in {"0", "false", "no"}
 
     try:
         image = Image.open(file.stream).convert("RGB")
-        result = predict_image(image, include_gradcam=True)
+        try:
+            result = predict_image(image, include_gradcam=include_gradcam)
+        except RuntimeError as exc:
+            # On low-memory instances, Grad-CAM backward pass may spike RAM.
+            if include_gradcam and "out of memory" in str(exc).lower():
+                gc.collect()
+                result = predict_image(image, include_gradcam=False)
+                result["gradcam_disabled_reason"] = "Grad-CAM disabled due to server memory limits."
+            else:
+                raise
 
         asset_token = save_uploaded_asset(image)
         result["asset_token"] = asset_token
@@ -663,10 +680,21 @@ def predict():
         append_prediction_log(log_row)
 
         return jsonify(result)
+    except RuntimeError as exc:
+        if "out of memory" in str(exc).lower():
+            return jsonify(
+                {
+                    "error": "Server ran out of memory during inference. "
+                    "Try smaller image, disable Grad-CAM, or use a higher-memory plan."
+                }
+            ), 500
+        return jsonify({"error": f"Prediction failed: {exc}"}), 500
     except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 500
     except Exception as exc:  # pragma: no cover
         return jsonify({"error": f"Prediction failed: {exc}"}), 500
+    finally:
+        gc.collect()
 
 
 @app.post("/predict-batch")
@@ -724,6 +752,8 @@ def predict_batch():
             )
         except Exception as exc:  # pragma: no cover
             results.append({"file_name": file.filename or "unknown", "error": str(exc)})
+        finally:
+            gc.collect()
 
     valid_results = [row for row in results if "error" not in row]
     summary = build_batch_summary(valid_results)
