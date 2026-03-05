@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Model Metrics - RetinaCare DANN</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,700&family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <div class="ambient"></div>
+    <header class="topbar">
+      <div class="brand">RetinaCare DANN - Model Metrics</div>
+      <nav>
+        <a href="{{ url_for('index') }}">Screening</a>
+        <a href="#overview">Overview</a>
+        <a href="#matrix">Confusion Matrix</a>
+        <a href="#architecture">Architecture</a>
+      </nav>
+      <div class="nav-actions">
+        {% if is_admin %}
+        <a class="ghost-btn" href="{{ url_for('admin') }}">Admin Dashboard</a>
+        {% else %}
+        <a class="ghost-btn" href="{{ url_for('login') }}">Doctor Login</a>
+        {% endif %}
+        <a class="pill-btn" href="{{ url_for('index') }}">Back to Screening</a>
+      </div>
+    </header>
+
+    <main class="metrics-page">
+      <section id="overview" class="screening-panel">
+        <div class="panel-head">
+          <h2>Academic Results Dashboard</h2>
+          <p>
+            Metrics loaded from <code>{{ metrics_dir }}</code><br />
+            Model checkpoint: <code>{{ model_path }}</code> | Backbone: <code>{{ backbone }}</code> | Image size:
+            <code>{{ img_size }}</code>
+          </p>
+        </div>
+
+        <div class="metrics-grid">
+          <article class="metric-card">
+            <h3>Current OOD Accuracy</h3>
+            <p class="metric-value">{{ '%.2f'|format(current_target_accuracy) }}%</p>
+            <small>Final target-domain accuracy from latest run</small>
+          </article>
+
+          <article class="metric-card">
+            <h3>Current Macro F1</h3>
+            <p class="metric-value">{{ '%.2f'|format(current_target_macro_f1) }}%</p>
+            <small>Final target-domain macro F1 score</small>
+          </article>
+
+          <article class="metric-card">
+            <h3>Urgent Recall (Class 2)</h3>
+            <p class="metric-value">{{ '%.2f'|format(urgent_recall) }}%</p>
+            <small>Recall for vision-threatening category</small>
+          </article>
+
+          <article class="metric-card benchmark-card">
+            <h3>IDRiD Benchmark Accuracy</h3>
+            <p class="metric-value">{{ '%.2f'|format(presentation_idrid_accuracy) }}%</p>
+            <small>Presentation highlight card (editable via env)</small>
+          </article>
+
+          <article class="metric-card benchmark-card">
+            <h3>Benchmark Urgent Recall</h3>
+            <p class="metric-value">{{ '%.2f'|format(presentation_urgent_recall) }}%</p>
+            <small>Presentation highlight card (editable via env)</small>
+          </article>
+
+          <article class="metric-card muted-card">
+            <h3>Source Validation Accuracy</h3>
+            <p class="metric-value">{{ '%.2f'|format(current_source_accuracy) }}%</p>
+            <small>Useful to compare source fit vs target transfer</small>
+          </article>
+        </div>
+      </section>
+
+      <section id="matrix" class="screening-panel">
+        <div class="panel-head">
+          <h2>Confusion Matrix + Class Report</h2>
+          <p>Row-wise percentages show class-wise recall behavior.</p>
+        </div>
+
+        <div class="metrics-split">
+          <div class="matrix-wrap">
+            <table class="matrix-table">
+              <thead>
+                <tr>
+                  <th>True \ Pred</th>
+                  {% for name in class_names %}
+                  <th>{{ name }}</th>
+                  {% endfor %}
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in cm_rows %}
+                <tr>
+                  <th>{{ class_names[loop.index0] }}</th>
+                  {% for cell in row %}
+                  <td style="background: rgba(31, 122, 101, {{ '%.3f'|format(cell.alpha) }});">
+                    <div class="matrix-value">{{ cell.value }}</div>
+                    <div class="matrix-pct">{{ '%.1f'|format(cell.pct) }}%</div>
+                  </td>
+                  {% endfor %}
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="class-report-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Class</th>
+                  <th>Precision</th>
+                  <th>Recall</th>
+                  <th>F1</th>
+                  <th>Support</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in class_rows %}
+                <tr>
+                  <td>{{ row.name }}</td>
+                  <td>{{ '%.2f'|format(row.precision) }}%</td>
+                  <td>{{ '%.2f'|format(row.recall) }}%</td>
+                  <td>{{ '%.2f'|format(row.f1) }}%</td>
+                  <td>{{ row.support }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="screening-panel">
+        <div class="panel-head">
+          <h2>Recent Epoch Trend</h2>
+          <p>Target accuracy trajectory from the latest epochs.</p>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Epoch</th>
+                <th>Target Accuracy</th>
+                <th>Source Validation Accuracy</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in history_rows %}
+              <tr>
+                <td>{{ row.epoch }}</td>
+                <td>{{ '%.2f'|format(row.target_acc) }}%</td>
+                <td>{{ '%.2f'|format(row.source_val_acc) }}%</td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="3">No epoch history found in metrics file.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="architecture" class="screening-panel">
+        <div class="panel-head">
+          <h2>DANN Architecture Transparency</h2>
+          <p>
+            The network learns disease-focused features while reducing camera/domain bias through adversarial
+            domain confusion.
+          </p>
+        </div>
+
+        <div class="arch-diagram">
+          <svg viewBox="0 0 1120 360" role="img" aria-label="DANN architecture diagram">
+            <defs>
+              <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L0,6 L9,3 z" fill="#1f7a65"></path>
+              </marker>
+            </defs>
+
+            <rect x="40" y="130" width="180" height="86" rx="18" fill="#fff6ec" stroke="#d8d6cc" />
+            <text x="130" y="168" text-anchor="middle" class="svg-title">Source Images</text>
+            <text x="130" y="190" text-anchor="middle" class="svg-sub">(Labeled)</text>
+
+            <rect x="40" y="244" width="180" height="86" rx="18" fill="#eef8f4" stroke="#d8d6cc" />
+            <text x="130" y="282" text-anchor="middle" class="svg-title">Target Images</text>
+            <text x="130" y="304" text-anchor="middle" class="svg-sub">(Unlabeled)</text>
+
+            <rect x="300" y="126" width="305" height="210" rx="22" fill="#ffffff" stroke="#d8d6cc" />
+            <text x="452" y="166" text-anchor="middle" class="svg-title">Shared Feature Extractor</text>
+            <text x="452" y="190" text-anchor="middle" class="svg-sub">EfficientNet-B2 Backbone</text>
+            <text x="452" y="218" text-anchor="middle" class="svg-sub">Domain-Invariant Retinal Features</text>
+
+            <rect x="700" y="82" width="200" height="100" rx="18" fill="#e9f8f2" stroke="#d8d6cc" />
+            <text x="800" y="124" text-anchor="middle" class="svg-title">Class Classifier</text>
+            <text x="800" y="148" text-anchor="middle" class="svg-sub">DR Stage Prediction</text>
+
+            <rect x="700" y="224" width="200" height="100" rx="18" fill="#fff1eb" stroke="#d8d6cc" />
+            <text x="800" y="266" text-anchor="middle" class="svg-title">Domain Classifier</text>
+            <text x="800" y="290" text-anchor="middle" class="svg-sub">Source vs Target</text>
+
+            <rect x="942" y="224" width="140" height="100" rx="16" fill="#ffffff" stroke="#d8d6cc" />
+            <text x="1012" y="268" text-anchor="middle" class="svg-title">GRL</text>
+            <text x="1012" y="292" text-anchor="middle" class="svg-sub">Gradient</text>
+
+            <line x1="220" y1="174" x2="300" y2="174" stroke="#1f7a65" stroke-width="3" marker-end="url(#arrow)" />
+            <line x1="220" y1="286" x2="300" y2="286" stroke="#1f7a65" stroke-width="3" marker-end="url(#arrow)" />
+            <line x1="605" y1="150" x2="700" y2="130" stroke="#1f7a65" stroke-width="3" marker-end="url(#arrow)" />
+            <line x1="605" y1="268" x2="700" y2="274" stroke="#1f7a65" stroke-width="3" marker-end="url(#arrow)" />
+            <line x1="900" y1="274" x2="942" y2="274" stroke="#1f7a65" stroke-width="3" marker-end="url(#arrow)" />
+            <line x1="942" y1="244" x2="605" y2="244" stroke="#d46f4d" stroke-width="3" marker-end="url(#arrow)" />
+          </svg>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

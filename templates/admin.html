@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Dashboard - RetinaCare DANN</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,700&family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <div class="ambient"></div>
+    <header class="topbar">
+      <div class="brand">RetinaCare DANN - Admin</div>
+      <div class="nav-actions">
+        <a class="ghost-btn" href="{{ url_for('index') }}">Public Interface</a>
+        <a class="ghost-btn" href="{{ url_for('metrics') }}">Model Metrics</a>
+        <a class="ghost-btn" href="{{ url_for('logout') }}">Logout</a>
+      </div>
+    </header>
+
+    <main class="admin-page">
+      <section class="screening-panel">
+        <div class="panel-head">
+          <h2>Doctor Dashboard</h2>
+          <p>Logged in as <strong>{{ admin_user }}</strong>. Total stored predictions: <strong>{{ total }}</strong>.</p>
+        </div>
+
+        <div class="summary-grid">
+          {% for label, count in summary.items() %}
+          <article class="summary-card">
+            <h3>{{ label }}</h3>
+            <p>{{ count }} cases</p>
+          </article>
+          {% endfor %}
+        </div>
+
+        <div class="summary-grid urgency-grid">
+          {% for label, count in urgency_summary.items() %}
+          <article class="summary-card">
+            <h3>{{ label }} Priority</h3>
+            <p>{{ count }} cases</p>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="screening-panel">
+        <div class="panel-head">
+          <h2>Recent Prediction History</h2>
+          <p>Latest records are shown first.</p>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Timestamp (UTC)</th>
+                <th>Mode</th>
+                <th>Batch ID</th>
+                <th>Image</th>
+                <th>Patient ID</th>
+                <th>Age</th>
+                <th>Conditions</th>
+                <th>Predicted Class</th>
+                <th>Urgency</th>
+                <th>Confidence</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in logs %}
+              <tr>
+                <td>{{ row.timestamp or '-' }}</td>
+                <td>{{ row.mode or 'single' }}</td>
+                <td>{{ row.batch_id or '-' }}</td>
+                <td>{{ row.file_name or '-' }}</td>
+                <td>{{ row.patient_id or '-' }}</td>
+                <td>{{ row.age or '-' }}</td>
+                <td>{{ row.conditions or '-' }}</td>
+                <td>{{ row.label or '-' }}</td>
+                <td>{{ row.urgency or '-' }}</td>
+                <td>
+                  {% if row.confidence is defined %}
+                  {{ '%.2f'|format((row.confidence|float) * 100.0) }}%
+                  {% else %}
+                  -
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="10">No predictions logged yet.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

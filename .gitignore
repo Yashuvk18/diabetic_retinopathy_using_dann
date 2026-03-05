@@ -1,0 +1,23 @@
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Python cache / env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Large local assets
+data/
+outputs/
+
+# Local build artifacts
+*.log

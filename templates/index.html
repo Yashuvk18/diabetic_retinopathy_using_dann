@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RetinaCare DANN</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,700&family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <div class="ambient"></div>
+    <header class="topbar">
+      <div class="brand">RetinaCare DANN</div>
+      <nav>
+        <a href="#screening">Screening</a>
+        <a href="#batch">Batch</a>
+        <a href="{{ url_for('metrics') }}">Model Metrics</a>
+        <a href="#safety">Safety</a>
+      </nav>
+      <div class="nav-actions">
+        {% if is_admin %}
+        <a class="ghost-btn" href="{{ url_for('admin') }}">Admin Dashboard</a>
+        <a class="ghost-btn" href="{{ url_for('logout') }}">Logout</a>
+        {% else %}
+        <a class="ghost-btn" href="{{ url_for('login') }}">Doctor Login</a>
+        {% endif %}
+        <a class="pill-btn" href="#screening">Start Screening</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Domain-Adaptive Diabetic Retinopathy Assistant</p>
+          <h1>Explainable Retina Triage for Real Clinical Flow.</h1>
+          <p class="subtext">
+            DANN + EfficientNet-B2 screening with patient metadata capture, Grad-CAM evidence, confidence
+            distribution, batch triage, and downloadable clinical reports.
+          </p>
+          <div class="hero-actions">
+            <a class="pill-btn" href="#screening">Upload Fundus Images</a>
+            <a class="text-link" href="{{ url_for('metrics') }}">See Metrics & Architecture</a>
+          </div>
+        </div>
+
+        <aside class="hero-cards">
+          <article>
+            <h3>Class 0</h3>
+            <p>No DR detected. Annual checkup guidance.</p>
+          </article>
+          <article>
+            <h3>Class 1</h3>
+            <p>Monitorable signs detected. Routine ophthalmology follow-up.</p>
+          </article>
+          <article>
+            <h3>Class 2</h3>
+            <p>Vision-threatening findings. Urgent referral needed.</p>
+          </article>
+        </aside>
+      </section>
+
+      <section id="screening" class="screening-panel">
+        <div class="panel-head">
+          <h2>Clinical Triage Interface</h2>
+          <p>Single image mode includes Grad-CAM heatmap and clinical PDF report.</p>
+        </div>
+
+        <div class="split-layout">
+          <form id="predict-form" class="upload-card">
+            <div class="meta-grid">
+              <label>
+                Patient ID
+                <input id="patient-id" name="patient_id" type="text" placeholder="e.g., OPD-2026-104" />
+              </label>
+              <label>
+                Age
+                <input id="patient-age" name="age" type="number" min="0" max="120" placeholder="e.g., 56" />
+              </label>
+              <label class="wide">
+                Pre-existing Conditions
+                <textarea id="patient-conditions" name="conditions" rows="3" placeholder="e.g., HbA1c 9.2, Hypertension"></textarea>
+              </label>
+            </div>
+
+            <label for="image-input" class="dropzone" id="dropzone">
+              <input id="image-input" name="image" type="file" accept="image/*" multiple hidden />
+              <div class="drop-contents">
+                <p class="drop-title">Drop one or multiple fundus images here</p>
+                <p class="drop-meta">JPG, PNG, TIFF supported</p>
+              </div>
+            </label>
+
+            <div class="preview-wrap" id="preview-wrap" hidden>
+              <img id="preview" alt="Uploaded fundus preview" />
+            </div>
+
+            <p class="mode-hint" id="mode-hint">No files selected.</p>
+
+            <button class="pill-btn full" id="predict-btn" type="submit">Run Triage</button>
+            <button class="ghost-btn full" id="force-batch-btn" type="button">Run Batch Triage</button>
+
+            <p class="small-note">
+              {% if model_ready %}
+              Model ready: <code>{{ model_path }}</code> | backbone: <code>{{ backbone }}</code> | image size:
+              <code>{{ img_size }}</code>
+              {% else %}
+              Model checkpoint missing at <code>{{ model_path }}</code>. Train first or set <code>MODEL_PATH</code>.
+              {% endif %}
+              <br />Batch limit: <code>{{ max_batch_files }}</code> files/request.
+            </p>
+          </form>
+
+          <section class="result-card" id="result-card">
+            <div class="result-state" id="result-state">Waiting for image upload…</div>
+
+            <div id="single-result" hidden>
+              <div class="status-row">
+                <span class="badge" id="result-badge"></span>
+                <span class="urgency" id="result-urgency"></span>
+              </div>
+              <h3 id="result-label"></h3>
+              <p id="result-message"></p>
+              <p class="patient-line" id="result-patient"></p>
+
+              <div class="prob-headline">Confidence Distribution</div>
+              <div class="prob-list" id="prob-list"></div>
+
+              <div class="cam-panel" id="cam-panel" hidden>
+                <h4>Grad-CAM Attention Map</h4>
+                <p>Highlighted areas show where the model focused before predicting.</p>
+                <img id="cam-image" alt="Grad-CAM heatmap overlay" />
+              </div>
+
+              <div class="result-actions">
+                <button class="ghost-btn" id="download-report-btn" type="button" hidden>Download Clinical Report</button>
+              </div>
+            </div>
+
+            <div id="batch-result" hidden>
+              <div class="status-row">
+                <span class="badge">Batch Complete</span>
+                <span class="urgency" id="batch-id"></span>
+              </div>
+              <p class="batch-note" id="batch-note"></p>
+              <div class="batch-summary" id="batch-summary"></div>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>File</th>
+                      <th>Prediction</th>
+                      <th>Urgency</th>
+                      <th>Confidence</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="batch-body-rows"></tbody>
+                </table>
+              </div>
+
+              <div class="result-actions">
+                <button class="ghost-btn" id="download-batch-csv-btn" type="button" hidden>Download Batch CSV</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="batch" class="grid-three">
+        <article>
+          <h3>1. Single Triage</h3>
+          <p>Upload one image to get class prediction, confidence bars, and Grad-CAM explainability map.</p>
+        </article>
+        <article>
+          <h3>2. Batch Triage</h3>
+          <p>Upload many scans together and get urgent-case counts with a complete result table.</p>
+        </article>
+        <article>
+          <h3>3. Clinical Reporting</h3>
+          <p>Export a branded PDF with metadata, probabilities, and doctor signature space.</p>
+        </article>
+      </section>
+
+      <section id="safety" class="safety">
+        <h2>Safety Note</h2>
+        <p>
+          This tool is for academic and screening support only. Final diagnosis and treatment
+          decisions must be made by qualified medical professionals.
+        </p>
+      </section>
+    </main>
+
+    <script>
+      window.MODEL_READY = {{ 'true' if model_ready else 'false' }};
+      window.MAX_BATCH_FILES = {{ max_batch_files }};
+    </script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+  </body>
+</html>

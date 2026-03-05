@@ -1,0 +1,29 @@
+.git
+.gitignore
+.DS_Store
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+*.swo
+
+.venv/
+venv/
+.env
+
+.ipynb_checkpoints/
+*.ipynb
+
+# Large training data folders (not needed for web inference)
+data/
+
+# Local cache/output artifacts except model checkpoints and logs used by app
+outputs/*.csv
+outputs/*.txt
+outputs/*.png
+outputs/*.jpg
+outputs/**/*.csv
+outputs/**/*.txt
+outputs/**/*.png
+outputs/**/*.jpg
